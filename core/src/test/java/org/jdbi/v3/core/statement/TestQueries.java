@@ -657,4 +657,29 @@ public class TestQueries {
         assertThat(results).containsExactly("john");
     }
 
+    @Test
+    public void testFilterKeepsNullElements() {
+        final Handle h = h2Extension.getSharedHandle();
+
+        int id = 0;
+        for (final String name : new String[] {null, "john", null, "lennon"}) {
+            h.execute("insert into something (id, name) values (?, ?)", ++id, name);
+        }
+
+        final String sql = "select name from something order by id";
+
+        assertThat(h.createQuery(sql).mapTo(String.class).filter(name -> true).list())
+                .containsExactly(null, "john", null, "lennon");
+        assertThat(h.createQuery(sql).mapTo(String.class).filter(name -> true).filter(Objects::isNull).list())
+                .containsExactly(null, null);
+
+        final ResultIterator<String> iter = h.createQuery(sql).mapTo(String.class).filter(Objects::isNull).iterator();
+        // next without hasNext returns the first null element
+        assertThat(iter.next()).isNull();
+        // calling hasNext repeatedly must not skip the last null element
+        IntStream.range(0, 5).forEach(i -> assertThat(iter).hasNext());
+        assertThat(iter.next()).isNull();
+        assertThat(iter).isExhausted();
+    }
+
 }

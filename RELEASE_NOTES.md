@@ -1,5 +1,8 @@
 # Unreleased
 
+- Fix `ResultIterable.filter` dropping a `null` element that the predicate accepts, or throwing
+  `NoSuchElementException` when it is the last one
+
 # 3.55.0
 
 - Bind and map types that are not public: a package-private bean class with public accessors, a non-public

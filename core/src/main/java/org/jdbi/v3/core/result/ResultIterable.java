@@ -464,7 +464,10 @@ public interface ResultIterable<T> extends Iterable<T> {
      * Please note that filtering takes place in Java i.e. your client code, <b>not in the database</b>.<br>
      * Filtering inside the database will most likely be of higher performance than filtering outside,
      * as intermediate results are loaded into Java and then discarded. Moreover, indexes that may exist
-     * in the database will not be utilized here.
+     * in the database will not be utilized here.<p>
+     *
+     * As with {@link Stream#filter(Predicate)}, a {@code null} element is passed to the predicate
+     * and kept if the predicate accepts it.
      *
      * @param predicate a non-null predicate to apply to each element
      *                  to determine whether it should be included in the result
@@ -475,8 +478,11 @@ public interface ResultIterable<T> extends Iterable<T> {
     default ResultIterable<T> filter(Predicate<? super T> predicate) {
         Objects.requireNonNull(predicate, "Filter required");
         return () -> new ResultIteratorDelegate<T, T>(iterator()) {
-            /** The next result (initially {@code null}). */
+            /** The next result; only meaningful while {@link #hasPending} is set, and may itself be {@code null}. */
             private T next;
+
+            /** Whether {@link #next} holds a result that was not returned yet. */
+            private boolean hasPending;
 
             /**
              * Returns {@code true} if the resultset has a {@code next} element.<br>
@@ -486,7 +492,7 @@ public interface ResultIterable<T> extends Iterable<T> {
              */
             @Override
             public boolean hasNext() {
-                return next != null || findNext();
+                return hasPending || findNext();
             }
 
             /**
@@ -497,11 +503,12 @@ public interface ResultIterable<T> extends Iterable<T> {
              */
             @Override
             public T next() {
-                if (next == null && !findNext()) {
+                if (!hasPending && !findNext()) {
                     throw new NoSuchElementException("No more filtered results");
                 }
                 T n = next;
                 next = null;
+                hasPending = false;
                 return n;
             }
 
@@ -512,10 +519,12 @@ public interface ResultIterable<T> extends Iterable<T> {
             @SuppressWarnings("PMD.UnusedAssignment")
             private boolean findNext() {
                 next = null;
+                hasPending = false;
                 while (getDelegate().hasNext()) {
                     T n = getDelegate().next();
                     if (predicate.test(n)) {
                         next = n;
+                        hasPending = true;
                         return true;
                     }
                 }
